@@ -11,12 +11,12 @@ include $(TOPDIR)/rules.mk
 include ../python3-version.mk
 
 PKG_NAME:=python3
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_VERSION:=$(PYTHON3_VERSION).$(PYTHON3_VERSION_MICRO)
 
 PKG_SOURCE:=Python-$(PKG_VERSION).tar.xz
 PKG_SOURCE_URL:=https://www.python.org/ftp/python/$(PKG_VERSION)
-PKG_HASH:=5ae03e308260164baba39921fdb4dbf8e6d03d8235a939d4582b33f0b5e46a83
+PKG_HASH:=5c88848668640d3e152b35b4536ef1c23b2ca4bd2c957ef1ecbb053f571dd3f6
 
 PKG_MAINTAINER:=Jeffery To <jeffery.to@gmail.com>
 PKG_LICENSE:=PSF-2.0
@@ -42,7 +42,7 @@ PKG_CONFIG_DEPENDS:= \
 	CONFIG_PACKAGE_python3-pkg-resources \
 	CONFIG_PACKAGE_python3-setuptools CONFIG_PACKAGE_python3-pip
 
-PKG_BUILD_DEPENDS:=bluez python3/host
+PKG_BUILD_DEPENDS:=bluez python3/host python-build/host python-installer/host python-wheel/host
 HOST_BUILD_DEPENDS:=bzip2/host libffi/host
 
 include $(INCLUDE_DIR)/host-build.mk
@@ -135,6 +135,11 @@ define Package/python3/description
   It's python3-light + all other packages.
 endef
 
+# Set READELF here so that the exact same readelf program name can be
+# replaced in _sysconfigdata.py (in Py3Package/python3-base/install)
+TARGET_CONFIGURE_OPTS+= \
+	READELF="$(TARGET_CROSS)readelf"
+
 EXTRA_LDFLAGS+= \
 	-L$(PKG_BUILD_DIR) \
 	-L$(STAGING_DIR)/usr/lib -L$(STAGING_DIR)/lib
@@ -157,7 +162,6 @@ CONFIGURE_ARGS+= \
 	--with-system-ffi \
 	--without-cxx-main \
 	--without-ensurepip \
-	--without-pymalloc \
 	--disable-test-modules \
 	$(if $(CONFIG_IPV6),--enable-ipv6) \
 	$(if $(findstring mips,$(CONFIG_ARCH)),,--with-lto) \
@@ -179,11 +183,11 @@ endif
 
 ifeq ($(PYTHON3_SETUPTOOLS_BUILD),1)
 define Build/Compile/python3-setuptools
+	$(HOST_PYTHON3_PIP_VARS) \
 	$(HOST_PYTHON3_PIP) \
-		--disable-pip-version-check \
-		--cache-dir "$(DL_DIR)/pip-cache" \
 		install \
 		--ignore-installed \
+		--progress-bar off \
 		--root=$(PKG_BUILD_DIR)/install-setuptools \
 		--prefix=/usr \
 		$(PKG_BUILD_DIR)/Lib/ensurepip/_bundled/setuptools-$(PYTHON3_SETUPTOOLS_VERSION)-py3-none-any.whl
@@ -197,11 +201,11 @@ endif # CONFIG_PACKAGE_python3-setuptools
 
 ifdef CONFIG_PACKAGE_python3-pip
 define Build/Compile/python3-pip
+	$(HOST_PYTHON3_PIP_VARS) \
 	$(HOST_PYTHON3_PIP) \
-		--disable-pip-version-check \
-		--cache-dir "$(DL_DIR)/pip-cache" \
 		install \
 		--ignore-installed \
+		--progress-bar off \
 		--root=$(PKG_BUILD_DIR)/install-pip \
 		--prefix=/usr \
 		$(PKG_BUILD_DIR)/Lib/ensurepip/_bundled/pip-$(PYTHON3_PIP_VERSION)-py3-none-any.whl
@@ -308,6 +312,13 @@ define Py3Package/python3/filespec
 -|$(PYTHON3_PKG_DIR)
 endef
 
+# libuuid is provided by e2fsprogs and uuid/uuid.h is moved into
+# $(STAGING_DIR_HOST)/include/e2fsprogs
+HOST_CFLAGS += \
+	-I$(STAGING_DIR_HOST)/include/e2fsprogs
+HOST_CPPFLAGS += \
+	-I$(STAGING_DIR_HOST)/include/e2fsprogs
+
 HOST_LDFLAGS += \
 	-Wl$(comma)-rpath$(comma)$(STAGING_DIR_HOSTPKG)/lib
 
@@ -334,10 +345,9 @@ HOST_CFLAGS += \
 HOST_CONFIGURE_ARGS+= \
 	--enable-optimizations \
 	--with-ensurepip=upgrade \
-	--with-system-expat=$(STAGING_DIR_HOSTPKG) \
+	--with-system-expat=$(STAGING_DIR_HOST) \
 	--with-ssl-default-suites=openssl \
 	--without-cxx-main \
-	--without-pymalloc \
 	--disable-test-modules \
 	CONFIG_SITE=
 
@@ -380,12 +390,6 @@ endef
 
 $(eval $(call HostBuild))
 
-$(foreach package, $(PYTHON3_PACKAGES),  \
-	$(eval $(call Py3Package,$(package))) \
-	$(eval $(call BuildPackage,$(package))) \
-	$(eval $(call BuildPackage,$(package)-src)) \
-)
-
 $(eval $(call BuildPackage,libpython3))
 
 $(eval $(call Py3Package,python3-base))
@@ -398,3 +402,9 @@ $(eval $(call BuildPackage,python3))
 
 $(eval $(call BuildPackage,python3-base-src))
 $(eval $(call BuildPackage,python3-light-src))
+
+$(foreach package, $(PYTHON3_PACKAGES),  \
+	$(eval $(call Py3Package,$(package))) \
+	$(eval $(call BuildPackage,$(package))) \
+	$(eval $(call BuildPackage,$(package)-src)) \
+)
