@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=dockerd
 PKG_VERSION:=20.10.22
-PKG_RELEASE:=4
+PKG_RELEASE:=5
 PKG_LICENSE:=Apache-2.0
 PKG_LICENSE_FILES:=LICENSE
 
@@ -164,6 +164,9 @@ define Package/dockerd/install
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 	$(INSTALL_DATA) ./files/etc/uci-defaults/16_docker-netifd-migrate2 \
 		$(1)/etc/uci-defaults/16_docker-netifd-migrate2
+
+	$(INSTALL_DIR) $(1)/lib/fstab.d
+	$(INSTALL_DATA) ./files/lib/fstab.d/dockerd.sh $(1)/lib/fstab.d/dockerd.sh
 
 endef
 
